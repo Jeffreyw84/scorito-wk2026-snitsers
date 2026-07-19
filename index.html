@@ -1,0 +1,507 @@
+<title>Puntenverloop Oranje Snitsers, WK 2026</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --page:           #f9f9f7;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --grid:           #e1e0d9;
+  --axis:           #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #008300; --s3: #e87ba4; --s4: #eda100;
+  --s5: #1baf7a; --s6: #eb6834; --s7: #4a3aa7; --s8: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #008300; --s3: #d55181; --s4: #c98500;
+    --s5: #199e70; --s6: #d95926; --s7: #9085e9; --s8: #e66767;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --surface-1:      #1a1a19;
+  --page:           #0d0d0d;
+  --text-primary:   #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --grid:           #2c2c2a;
+  --axis:           #383835;
+  --border:         rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #008300; --s3: #d55181; --s4: #c98500;
+  --s5: #199e70; --s6: #d95926; --s7: #9085e9; --s8: #e66767;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root {
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 24px 16px 40px;
+  min-height: 100vh;
+}
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+header h1 {
+  font-size: 1.5rem;
+  font-weight: 650;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+header p {
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+  font-size: 0.95rem;
+}
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 20px 8px;
+  overflow: hidden;
+}
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.card-head h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+}
+.card-head .hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.chart-scroll {
+  overflow-x: auto;
+  margin: 0 -4px;
+}
+svg { display: block; }
+.gridline { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.axis-text { fill: var(--text-muted); font-size: 11px; }
+.axis-line { stroke: var(--axis); stroke-width: 1; }
+.series-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: opacity 160ms ease, stroke-width 160ms ease;
+}
+.end-dot {
+  stroke: var(--surface-1);
+  stroke-width: 2;
+  transition: opacity 160ms ease;
+}
+.dimmed { opacity: 0.12; }
+.hovered { stroke-width: 3.5; }
+.end-label {
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity 160ms ease;
+}
+.end-label.dimmed { opacity: 0.12; }
+
+/* Legend */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 4px;
+  margin: 14px 0 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: transparent;
+  user-select: none;
+  transition: background 120ms ease, opacity 160ms ease, border-color 120ms ease;
+}
+.legend-item:hover { background: var(--grid); }
+.legend-item.dimmed { opacity: 0.35; }
+.legend-item.active { border-color: var(--border); font-weight: 650; color: var(--text-primary); }
+.legend-swatch {
+  width: 14px; height: 14px; border-radius: 4px; flex: none;
+}
+.legend-name { white-space: nowrap; }
+.legend-pts { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  min-width: 150px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 10;
+}
+.tooltip.visible { opacity: 1; }
+.tooltip-date {
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+}
+.tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1.5px 0;
+  color: var(--text-secondary);
+}
+.tooltip-row.top { color: var(--text-primary); font-weight: 650; }
+.tooltip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tooltip-name { flex: 1; }
+.tooltip-val { font-variant-numeric: tabular-nums; }
+.crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; opacity: 0; }
+.crosshair.visible { opacity: 1; }
+
+.chart-container { position: relative; }
+
+.footer-note {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin-top: 16px;
+  line-height: 1.5;
+}
+
+.table-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.table-toggle:hover { background: var(--grid); }
+
+.table-wrap { display: none; margin-top: 16px; overflow-x: auto; }
+.table-wrap.visible { display: block; }
+table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; font-variant-numeric: initial; }
+th { color: var(--text-muted); font-weight: 600; position: sticky; top: 0; background: var(--surface-1); }
+td.rank1 { font-weight: 700; color: var(--text-primary); }
+</style>
+
+<div class="viz-root">
+  <div class="wrap">
+    <header>
+      <h1>Puntenverloop Oranje Snitsers, WK 2026</h1>
+      <p>Klassementstotaal per verslag, 14 juni tot en met de finale op 19 juli. Klik een naam aan om die lijn te isoleren.</p>
+    </header>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Punten door het toernooi</h2>
+        <span class="hint">hover voor details per dag</span>
+      </div>
+      <div class="chart-scroll">
+        <div class="chart-container" id="chartContainer"></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <button class="table-toggle" id="tableToggle">Toon als tabel</button>
+      <div class="table-wrap" id="tableWrap"></div>
+      <p class="footer-note">Bron: dagelijkse Scorito-klassementen uit de verslagen van 14 juni t/m 19 juli 2026. Eindstand inclusief kampioensbonus (250pt) voor wie de winnaar van het WK als kampioen had.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const DATA = {"dates": ["2026-06-14", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-27", "2026-06-28", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-10", "2026-07-11", "2026-07-12", "2026-07-14", "2026-07-15", "2026-07-18", "2026-07-19"], "series": {"Jeff": [{"date": "2026-06-14", "points": 248}, {"date": "2026-06-15", "points": 369}, {"date": "2026-06-16", "points": 414}, {"date": "2026-06-17", "points": 566}, {"date": "2026-06-18", "points": 672}, {"date": "2026-06-19", "points": 777}, {"date": "2026-06-20", "points": 860}, {"date": "2026-06-21", "points": 935}, {"date": "2026-06-22", "points": 995}, {"date": "2026-06-23", "points": 1162}, {"date": "2026-06-24", "points": 1252}, {"date": "2026-06-25", "points": 1523}, {"date": "2026-06-26", "points": 1763}, {"date": "2026-06-27", "points": 2028}, {"date": "2026-06-28", "points": 2364}, {"date": "2026-06-29", "points": 2424}, {"date": "2026-06-30", "points": 2544}, {"date": "2026-07-01", "points": 2696}, {"date": "2026-07-02", "points": 2846}, {"date": "2026-07-03", "points": 3056}, {"date": "2026-07-04", "points": 3116}, {"date": "2026-07-05", "points": 3320}, {"date": "2026-07-06", "points": 3410}, {"date": "2026-07-07", "points": 3590}, {"date": "2026-07-08", "points": 3839}, {"date": "2026-07-10", "points": 3991}, {"date": "2026-07-11", "points": 4111}, {"date": "2026-07-12", "points": 4239}, {"date": "2026-07-14", "points": 4429}, {"date": "2026-07-15", "points": 4429}, {"date": "2026-07-18", "points": 4429}, {"date": "2026-07-19", "points": 4429}], "Sander": [{"date": "2026-06-14", "points": 165}, {"date": "2026-06-15", "points": 257}, {"date": "2026-06-16", "points": 332}, {"date": "2026-06-17", "points": 452}, {"date": "2026-06-18", "points": 527}, {"date": "2026-06-19", "points": 617}, {"date": "2026-06-20", "points": 722}, {"date": "2026-06-21", "points": 812}, {"date": "2026-06-22", "points": 902}, {"date": "2026-06-23", "points": 1022}, {"date": "2026-06-24", "points": 1112}, {"date": "2026-06-25", "points": 1437}, {"date": "2026-06-26", "points": 1677}, {"date": "2026-06-27", "points": 1967}, {"date": "2026-06-28", "points": 2207}, {"date": "2026-06-29", "points": 2267}, {"date": "2026-06-30", "points": 2359}, {"date": "2026-07-01", "points": 2631}, {"date": "2026-07-02", "points": 2767}, {"date": "2026-07-03", "points": 3007}, {"date": "2026-07-04", "points": 3143}, {"date": "2026-07-05", "points": 3347}, {"date": "2026-07-06", "points": 3347}, {"date": "2026-07-07", "points": 3437}, {"date": "2026-07-08", "points": 3551}, {"date": "2026-07-10", "points": 3671}, {"date": "2026-07-11", "points": 3791}, {"date": "2026-07-12", "points": 4099}, {"date": "2026-07-14", "points": 4369}, {"date": "2026-07-15", "points": 4594}, {"date": "2026-07-18", "points": 4690}, {"date": "2026-07-19", "points": 4690}], "Arjen": [{"date": "2026-06-14", "points": 150}, {"date": "2026-06-15", "points": 210}, {"date": "2026-06-16", "points": 330}, {"date": "2026-06-17", "points": 437}, {"date": "2026-06-18", "points": 513}, {"date": "2026-06-19", "points": 597}, {"date": "2026-06-20", "points": 702}, {"date": "2026-06-21", "points": 792}, {"date": "2026-06-22", "points": 852}, {"date": "2026-06-23", "points": 959}, {"date": "2026-06-24", "points": 1064}, {"date": "2026-06-25", "points": 1229}, {"date": "2026-06-26", "points": 1414}, {"date": "2026-06-27", "points": 1674}, {"date": "2026-06-28", "points": 2150}, {"date": "2026-06-29", "points": 2210}, {"date": "2026-06-30", "points": 2300}, {"date": "2026-07-01", "points": 2572}, {"date": "2026-07-02", "points": 2692}, {"date": "2026-07-03", "points": 2872}, {"date": "2026-07-04", "points": 3008}, {"date": "2026-07-05", "points": 3212}, {"date": "2026-07-06", "points": 3212}, {"date": "2026-07-07", "points": 3347}, {"date": "2026-07-08", "points": 3527}, {"date": "2026-07-10", "points": 3679}, {"date": "2026-07-11", "points": 3799}, {"date": "2026-07-12", "points": 3799}, {"date": "2026-07-14", "points": 3919}, {"date": "2026-07-15", "points": 3919}, {"date": "2026-07-18", "points": 4063}, {"date": "2026-07-19", "points": 4583}], "Geert": [{"date": "2026-06-14", "points": 143}, {"date": "2026-06-15", "points": 203}, {"date": "2026-06-16", "points": 203}, {"date": "2026-06-17", "points": 339}, {"date": "2026-06-18", "points": 429}, {"date": "2026-06-19", "points": 519}, {"date": "2026-06-20", "points": 587}, {"date": "2026-06-21", "points": 677}, {"date": "2026-06-22", "points": 745}, {"date": "2026-06-23", "points": 866}, {"date": "2026-06-24", "points": 956}, {"date": "2026-06-25", "points": 1317}, {"date": "2026-06-26", "points": 1663}, {"date": "2026-06-27", "points": 1958}, {"date": "2026-06-28", "points": 2248}, {"date": "2026-06-29", "points": 2308}, {"date": "2026-06-30", "points": 2398}, {"date": "2026-07-01", "points": 2640}, {"date": "2026-07-02", "points": 2820}, {"date": "2026-07-03", "points": 2970}, {"date": "2026-07-04", "points": 3030}, {"date": "2026-07-05", "points": 3234}, {"date": "2026-07-06", "points": 3348}, {"date": "2026-07-07", "points": 3528}, {"date": "2026-07-08", "points": 3642}, {"date": "2026-07-10", "points": 3794}, {"date": "2026-07-11", "points": 3914}, {"date": "2026-07-12", "points": 4034}, {"date": "2026-07-14", "points": 4404}, {"date": "2026-07-15", "points": 4404}, {"date": "2026-07-18", "points": 4500}, {"date": "2026-07-19", "points": 4930}], "Tinus": [{"date": "2026-06-14", "points": 120}, {"date": "2026-06-15", "points": 212}, {"date": "2026-06-16", "points": 212}, {"date": "2026-06-17", "points": 372}, {"date": "2026-06-18", "points": 447}, {"date": "2026-06-19", "points": 537}, {"date": "2026-06-20", "points": 642}, {"date": "2026-06-21", "points": 702}, {"date": "2026-06-22", "points": 778}, {"date": "2026-06-23", "points": 930}, {"date": "2026-06-24", "points": 1035}, {"date": "2026-06-25", "points": 1325}, {"date": "2026-06-26", "points": 1605}, {"date": "2026-06-27", "points": 1938}, {"date": "2026-06-28", "points": 2251}, {"date": "2026-06-29", "points": 2311}, {"date": "2026-06-30", "points": 2403}, {"date": "2026-07-01", "points": 2613}, {"date": "2026-07-02", "points": 2733}, {"date": "2026-07-03", "points": 2883}, {"date": "2026-07-04", "points": 3049}, {"date": "2026-07-05", "points": 3253}, {"date": "2026-07-06", "points": 3253}, {"date": "2026-07-07", "points": 3433}, {"date": "2026-07-08", "points": 3547}, {"date": "2026-07-10", "points": 3667}, {"date": "2026-07-11", "points": 3847}, {"date": "2026-07-12", "points": 4027}, {"date": "2026-07-14", "points": 4357}, {"date": "2026-07-15", "points": 4582}, {"date": "2026-07-18", "points": 4678}, {"date": "2026-07-19", "points": 5108}], "Thea": [{"date": "2026-06-14", "points": 113}, {"date": "2026-06-15", "points": 143}, {"date": "2026-06-16", "points": 143}, {"date": "2026-06-17", "points": 289}, {"date": "2026-06-18", "points": 395}, {"date": "2026-06-19", "points": 485}, {"date": "2026-06-20", "points": 523}, {"date": "2026-06-21", "points": 598}, {"date": "2026-06-22", "points": 636}, {"date": "2026-06-23", "points": 744}, {"date": "2026-06-24", "points": 834}, {"date": "2026-06-25", "points": 1050}, {"date": "2026-06-26", "points": 1265}, {"date": "2026-06-27", "points": 1505}, {"date": "2026-06-28", "points": 1831}, {"date": "2026-06-29", "points": 1891}, {"date": "2026-06-30", "points": 1981}, {"date": "2026-07-01", "points": 2101}, {"date": "2026-07-02", "points": 2221}, {"date": "2026-07-03", "points": 2431}, {"date": "2026-07-04", "points": 2507}, {"date": "2026-07-05", "points": 2687}, {"date": "2026-07-06", "points": 2711}, {"date": "2026-07-07", "points": 2801}, {"date": "2026-07-08", "points": 2915}, {"date": "2026-07-10", "points": 3067}, {"date": "2026-07-11", "points": 3187}, {"date": "2026-07-12", "points": 3187}, {"date": "2026-07-14", "points": 3307}, {"date": "2026-07-15", "points": 3457}, {"date": "2026-07-18", "points": 3457}, {"date": "2026-07-19", "points": 3887}], "Jetze": [{"date": "2026-06-14", "points": 135}, {"date": "2026-06-15", "points": 195}, {"date": "2026-06-16", "points": 195}, {"date": "2026-06-17", "points": 346}, {"date": "2026-06-18", "points": 452}, {"date": "2026-06-19", "points": 542}, {"date": "2026-06-20", "points": 632}, {"date": "2026-06-21", "points": 722}, {"date": "2026-06-22", "points": 782}, {"date": "2026-06-23", "points": 926}, {"date": "2026-06-24", "points": 1016}, {"date": "2026-06-25", "points": 1401}, {"date": "2026-06-26", "points": 1711}, {"date": "2026-06-27", "points": 2110}, {"date": "2026-06-28", "points": 2438}, {"date": "2026-06-29", "points": 2498}, {"date": "2026-06-30", "points": 2588}, {"date": "2026-07-01", "points": 2860}, {"date": "2026-07-02", "points": 3010}, {"date": "2026-07-03", "points": 3130}, {"date": "2026-07-04", "points": 3266}, {"date": "2026-07-05", "points": 3515}, {"date": "2026-07-06", "points": 3629}, {"date": "2026-07-07", "points": 3719}, {"date": "2026-07-08", "points": 3923}, {"date": "2026-07-10", "points": 4075}, {"date": "2026-07-11", "points": 4255}, {"date": "2026-07-12", "points": 4255}, {"date": "2026-07-14", "points": 4375}, {"date": "2026-07-15", "points": 4375}, {"date": "2026-07-18", "points": 4615}, {"date": "2026-07-19", "points": 4615}], "Michiel": [{"date": "2026-06-14", "points": 60}, {"date": "2026-06-15", "points": 90}, {"date": "2026-06-16", "points": 90}, {"date": "2026-06-17", "points": 250}, {"date": "2026-06-18", "points": 356}, {"date": "2026-06-19", "points": 416}, {"date": "2026-06-20", "points": 491}, {"date": "2026-06-21", "points": 596}, {"date": "2026-06-22", "points": 701}, {"date": "2026-06-23", "points": 823}, {"date": "2026-06-24", "points": 899}, {"date": "2026-06-25", "points": 1034}, {"date": "2026-06-26", "points": 1264}, {"date": "2026-06-27", "points": 1504}, {"date": "2026-06-28", "points": 1725}, {"date": "2026-06-29", "points": 1725}, {"date": "2026-06-30", "points": 1785}, {"date": "2026-07-01", "points": 1997}, {"date": "2026-07-02", "points": 2057}, {"date": "2026-07-03", "points": 2237}, {"date": "2026-07-04", "points": 2313}, {"date": "2026-07-05", "points": 2493}, {"date": "2026-07-06", "points": 2517}, {"date": "2026-07-07", "points": 2697}, {"date": "2026-07-08", "points": 2811}, {"date": "2026-07-10", "points": 3023}, {"date": "2026-07-11", "points": 3203}, {"date": "2026-07-12", "points": 3323}, {"date": "2026-07-14", "points": 3443}, {"date": "2026-07-15", "points": 3593}, {"date": "2026-07-18", "points": 3869}, {"date": "2026-07-19", "points": 3869}], "Fabian": [{"date": "2026-06-14", "points": 98}, {"date": "2026-06-15", "points": 188}, {"date": "2026-06-16", "points": 188}, {"date": "2026-06-17", "points": 355}, {"date": "2026-06-18", "points": 461}, {"date": "2026-06-19", "points": 551}, {"date": "2026-06-20", "points": 649}, {"date": "2026-06-21", "points": 739}, {"date": "2026-06-22", "points": 830}, {"date": "2026-06-23", "points": 982}, {"date": "2026-06-24", "points": 1072}, {"date": "2026-06-25", "points": 1408}, {"date": "2026-06-26", "points": 1698}, {"date": "2026-06-27", "points": 1983}, {"date": "2026-06-28", "points": 2374}, {"date": "2026-06-29", "points": 2464}, {"date": "2026-06-30", "points": 2586}, {"date": "2026-07-01", "points": 2796}, {"date": "2026-07-02", "points": 3006}, {"date": "2026-07-03", "points": 3216}, {"date": "2026-07-04", "points": 3352}, {"date": "2026-07-05", "points": 3556}, {"date": "2026-07-06", "points": 3718}, {"date": "2026-07-07", "points": 3808}, {"date": "2026-07-08", "points": 3922}, {"date": "2026-07-10", "points": 4074}, {"date": "2026-07-11", "points": 4254}, {"date": "2026-07-12", "points": 4562}, {"date": "2026-07-14", "points": 4682}, {"date": "2026-07-15", "points": 4907}, {"date": "2026-07-18", "points": 5099}, {"date": "2026-07-19", "points": 5279}], "Jan": [{"date": "2026-06-14", "points": 75}, {"date": "2026-06-15", "points": 105}, {"date": "2026-06-16", "points": 150}, {"date": "2026-06-17", "points": 310}, {"date": "2026-06-18", "points": 386}, {"date": "2026-06-19", "points": 446}, {"date": "2026-06-20", "points": 536}, {"date": "2026-06-21", "points": 626}, {"date": "2026-06-22", "points": 686}, {"date": "2026-06-23", "points": 823}, {"date": "2026-06-24", "points": 959}, {"date": "2026-06-25", "points": 1249}, {"date": "2026-06-26", "points": 1474}, {"date": "2026-06-27", "points": 1814}, {"date": "2026-06-28", "points": 1990}, {"date": "2026-06-29", "points": 2050}, {"date": "2026-06-30", "points": 2110}, {"date": "2026-07-01", "points": 2290}, {"date": "2026-07-02", "points": 2442}, {"date": "2026-07-03", "points": 2502}, {"date": "2026-07-04", "points": 2728}, {"date": "2026-07-05", "points": 2842}, {"date": "2026-07-06", "points": 3001}, {"date": "2026-07-07", "points": 3181}, {"date": "2026-07-08", "points": 3205}, {"date": "2026-07-10", "points": 3389}, {"date": "2026-07-11", "points": 3509}, {"date": "2026-07-12", "points": 3509}, {"date": "2026-07-14", "points": 3779}, {"date": "2026-07-15", "points": 3779}, {"date": "2026-07-18", "points": 3875}, {"date": "2026-07-19", "points": 4055}], "Taeke": [{"date": "2026-06-14", "points": 83}, {"date": "2026-06-15", "points": 143}, {"date": "2026-06-16", "points": 143}, {"date": "2026-06-17", "points": 319}, {"date": "2026-06-18", "points": 395}, {"date": "2026-06-19", "points": 485}, {"date": "2026-06-20", "points": 583}, {"date": "2026-06-21", "points": 613}, {"date": "2026-06-22", "points": 651}, {"date": "2026-06-23", "points": 819}, {"date": "2026-06-24", "points": 909}, {"date": "2026-06-25", "points": 1355}, {"date": "2026-06-26", "points": 1620}, {"date": "2026-06-27", "points": 1810}, {"date": "2026-06-28", "points": 2096}, {"date": "2026-06-29", "points": 2156}, {"date": "2026-06-30", "points": 2246}, {"date": "2026-07-01", "points": 2442}, {"date": "2026-07-02", "points": 2654}, {"date": "2026-07-03", "points": 2834}, {"date": "2026-07-04", "points": 2954}, {"date": "2026-07-05", "points": 3134}, {"date": "2026-07-06", "points": 3296}, {"date": "2026-07-07", "points": 3521}, {"date": "2026-07-08", "points": 3635}, {"date": "2026-07-10", "points": 3787}, {"date": "2026-07-11", "points": 3967}, {"date": "2026-07-12", "points": 3967}, {"date": "2026-07-14", "points": 4087}, {"date": "2026-07-15", "points": 4087}, {"date": "2026-07-18", "points": 4363}, {"date": "2026-07-19", "points": 4543}], "Marcel": [{"date": "2026-06-14", "points": 83}, {"date": "2026-06-15", "points": 143}, {"date": "2026-06-16", "points": 173}, {"date": "2026-06-17", "points": 309}, {"date": "2026-06-18", "points": 399}, {"date": "2026-06-19", "points": 459}, {"date": "2026-06-20", "points": 557}, {"date": "2026-06-21", "points": 678}, {"date": "2026-06-22", "points": 762}, {"date": "2026-06-23", "points": 853}, {"date": "2026-06-24", "points": 913}, {"date": "2026-06-25", "points": 1194}, {"date": "2026-06-26", "points": 1519}, {"date": "2026-06-27", "points": 1744}, {"date": "2026-06-28", "points": 2152}, {"date": "2026-06-29", "points": 2212}, {"date": "2026-06-30", "points": 2212}, {"date": "2026-07-01", "points": 2438}, {"date": "2026-07-02", "points": 2590}, {"date": "2026-07-03", "points": 2650}, {"date": "2026-07-04", "points": 2770}, {"date": "2026-07-05", "points": 2974}, {"date": "2026-07-06", "points": 3046}, {"date": "2026-07-07", "points": 3046}, {"date": "2026-07-08", "points": 3250}, {"date": "2026-07-10", "points": 3402}, {"date": "2026-07-11", "points": 3582}, {"date": "2026-07-12", "points": 3582}, {"date": "2026-07-14", "points": 3702}, {"date": "2026-07-15", "points": 3702}, {"date": "2026-07-18", "points": 3894}, {"date": "2026-07-19", "points": 4074}]}};
+  const dates = DATA.dates;
+  const series = DATA.series;
+  const players = Object.keys(series);
+
+  // Fixed hue order per palette.md — 8 solid + 4 repeats with dash pattern
+  const hueSlots = ['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)','var(--s6)','var(--s7)','var(--s8)'];
+  const order = ["Fabian","Jetze","Jeff","Sander","Tinus","Geert","Taeke","Arjen","Marcel","Jan","Michiel","Thea"];
+  const dashPatterns = ["none","none","none","none","none","none","none","none","6 4","6 4","6 4","6 4"];
+
+  const meta = {};
+  order.forEach((name, i) => {
+    meta[name] = {
+      color: hueSlots[i % 8],
+      dash: dashPatterns[i],
+      final: series[name][series[name].length - 1].points
+    };
+  });
+
+  // ---- Chart geometry ----
+  const isMobile = window.matchMedia('(max-width: 640px)').matches;
+  const W = Math.max(dates.length * 34, 760);
+  const H = 460;
+  const marginL = 56, marginR = 92, marginT = 16, marginB = 34;
+  const plotW = W - marginL - marginR;
+  const plotH = H - marginT - marginB;
+
+  const allPoints = players.flatMap(p => series[p].map(d => d.points));
+  const maxVal = Math.max(...allPoints);
+  const niceMax = Math.ceil(maxVal / 500) * 500;
+
+  const x = i => marginL + (i / (dates.length - 1)) * plotW;
+  const y = v => marginT + plotH - (v / niceMax) * plotH;
+
+  function pathFor(name) {
+    return series[name].map((d, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(d.points).toFixed(1)}`).join(' ');
+  }
+
+  // ---- Build SVG ----
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("width", W);
+  svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.style.overflow = "visible";
+
+  // gridlines (y)
+  const steps = 5;
+  for (let s = 0; s <= steps; s++) {
+    const val = (niceMax / steps) * s;
+    const gy = y(val);
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", marginL);
+    line.setAttribute("x2", W - marginR);
+    line.setAttribute("y1", gy);
+    line.setAttribute("y2", gy);
+    line.setAttribute("class", "gridline");
+    svg.appendChild(line);
+
+    const label = document.createElementNS(svgNS, "text");
+    label.setAttribute("x", marginL - 10);
+    label.setAttribute("y", gy + 4);
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("class", "axis-text");
+    label.textContent = val.toLocaleString("nl-NL");
+    svg.appendChild(label);
+  }
+
+  // x-axis baseline
+  const baseline = document.createElementNS(svgNS, "line");
+  baseline.setAttribute("x1", marginL);
+  baseline.setAttribute("x2", W - marginR);
+  baseline.setAttribute("y1", marginT + plotH);
+  baseline.setAttribute("y2", marginT + plotH);
+  baseline.setAttribute("class", "axis-line");
+  svg.appendChild(baseline);
+
+  // x labels: sparse (every ~4th)
+  dates.forEach((d, i) => {
+    if (i % 4 !== 0 && i !== dates.length - 1) return;
+    const [, m, day] = d.split("-");
+    const label = document.createElementNS(svgNS, "text");
+    label.setAttribute("x", x(i));
+    label.setAttribute("y", marginT + plotH + 20);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("class", "axis-text");
+    label.textContent = `${day}/${m}`;
+    svg.appendChild(label);
+  });
+
+  // lines + end dots + end labels, in a fixed group per player for dim/highlight
+  const lineEls = {}, dotEls = {}, labelEls = {};
+  order.forEach(name => {
+    const g = document.createElementNS(svgNS, "g");
+    g.setAttribute("data-player", name);
+
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", pathFor(name));
+    path.setAttribute("class", "series-line");
+    path.setAttribute("stroke", meta[name].color);
+    if (meta[name].dash !== "none") path.setAttribute("stroke-dasharray", meta[name].dash);
+    g.appendChild(path);
+    lineEls[name] = path;
+
+    const lastIdx = series[name].length - 1;
+    const dot = document.createElementNS(svgNS, "circle");
+    dot.setAttribute("cx", x(lastIdx));
+    dot.setAttribute("cy", y(series[name][lastIdx].points));
+    dot.setAttribute("r", 4.5);
+    dot.setAttribute("fill", meta[name].color);
+    dot.setAttribute("class", "end-dot");
+    g.appendChild(dot);
+    dotEls[name] = dot;
+
+    svg.appendChild(g);
+  });
+
+  // end labels drawn after all lines/dots so text sits on top; skip pure overlap collisions minimally
+  const labelPositions = order
+    .map(name => ({ name, val: meta[name].final }))
+    .sort((a, b) => b.val - a.val);
+
+  const minGap = 15;
+  let lastY = -Infinity;
+  labelPositions.forEach(({ name }) => {
+    const lastIdx = series[name].length - 1;
+    let ly = y(series[name][lastIdx].points);
+    if (ly - lastY < minGap) ly = lastY + minGap;
+    lastY = ly;
+
+    const label = document.createElementNS(svgNS, "text");
+    label.setAttribute("x", x(lastIdx) + 10);
+    label.setAttribute("y", ly + 4);
+    label.setAttribute("class", "end-label");
+    label.setAttribute("fill", meta[name].color);
+    label.textContent = name;
+    svg.appendChild(label);
+    labelEls[name] = label;
+  });
+
+  // crosshair
+  const crosshair = document.createElementNS(svgNS, "line");
+  crosshair.setAttribute("y1", marginT);
+  crosshair.setAttribute("y2", marginT + plotH);
+  crosshair.setAttribute("class", "crosshair");
+  svg.appendChild(crosshair);
+
+  // hover hit area
+  const hitRect = document.createElementNS(svgNS, "rect");
+  hitRect.setAttribute("x", marginL);
+  hitRect.setAttribute("y", marginT);
+  hitRect.setAttribute("width", plotW);
+  hitRect.setAttribute("height", plotH);
+  hitRect.setAttribute("fill", "transparent");
+  svg.appendChild(hitRect);
+
+  const container = document.getElementById("chartContainer");
+  container.style.position = "relative";
+  container.appendChild(svg);
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "tooltip";
+  container.appendChild(tooltip);
+
+  function setDim(activeName) {
+    order.forEach(name => {
+      const on = !activeName || name === activeName;
+      lineEls[name].classList.toggle("dimmed", !on);
+      lineEls[name].classList.toggle("hovered", on && !!activeName);
+      dotEls[name].classList.toggle("dimmed", !on);
+      labelEls[name].classList.toggle("dimmed", !on);
+    });
+    document.querySelectorAll(".legend-item").forEach(el => {
+      const on = !activeName || el.dataset.player === activeName;
+      el.classList.toggle("dimmed", !on);
+      el.classList.toggle("active", !!activeName && el.dataset.player === activeName);
+    });
+  }
+
+  let isolated = null;
+
+  hitRect.addEventListener("mousemove", (e) => {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const mx = (e.clientX - rect.left) * scaleX;
+    let idx = Math.round((mx - marginL) / plotW * (dates.length - 1));
+    idx = Math.max(0, Math.min(dates.length - 1, idx));
+
+    crosshair.setAttribute("x1", x(idx));
+    crosshair.setAttribute("x2", x(idx));
+    crosshair.classList.add("visible");
+
+    const rows = order
+      .map(name => ({ name, pts: series[name][idx].points, color: meta[name].color }))
+      .sort((a, b) => b.pts - a.pts);
+
+    const d = dates[idx];
+    const [, m, day] = d.split("-");
+    tooltip.innerHTML = `<div class="tooltip-date">${day}-${m}-2026</div>` +
+      rows.map((r, i) => `<div class="tooltip-row ${i === 0 ? 'top' : ''}">
+        <span class="tooltip-dot" style="background:${r.color}"></span>
+        <span class="tooltip-name">${i + 1}. ${r.name}</span>
+        <span class="tooltip-val">${r.pts.toLocaleString("nl-NL")}</span>
+      </div>`).join("");
+
+    const containerRect = container.getBoundingClientRect();
+    const relX = (e.clientX - containerRect.left);
+    const relY = (e.clientY - containerRect.top);
+    let tx = relX + 16;
+    if (tx + 170 > container.scrollWidth) tx = relX - 170;
+    tooltip.style.left = tx + "px";
+    tooltip.style.top = Math.max(0, relY - 40) + "px";
+    tooltip.classList.add("visible");
+  });
+
+  hitRect.addEventListener("mouseleave", () => {
+    crosshair.classList.remove("visible");
+    tooltip.classList.remove("visible");
+  });
+
+  // ---- Legend ----
+  const legend = document.getElementById("legend");
+  const finalRanked = [...order].sort((a, b) => meta[b].final - meta[a].final);
+  finalRanked.forEach(name => {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.dataset.player = name;
+    item.innerHTML = `<span class="legend-swatch" style="background:${meta[name].color}${meta[name].dash !== 'none' ? ';background-image:repeating-linear-gradient(90deg, transparent, transparent 3px, ' + 'var(--surface-1)' + ' 3px, var(--surface-1) 5px)' : ''}"></span>
+      <span class="legend-name">${name}</span>
+      <span class="legend-pts">${meta[name].final.toLocaleString("nl-NL")}pt</span>`;
+    item.addEventListener("click", () => {
+      isolated = isolated === name ? null : name;
+      setDim(isolated);
+    });
+    item.addEventListener("mouseenter", () => { if (!isolated) setDim(name); });
+    item.addEventListener("mouseleave", () => { if (!isolated) setDim(null); });
+    legend.appendChild(item);
+  });
+
+  // ---- Table view ----
+  const tableWrap = document.getElementById("tableWrap");
+  const toggleBtn = document.getElementById("tableToggle");
+  function buildTable() {
+    let html = "<table><thead><tr><th>Datum</th>" + finalRanked.map(n => `<th>${n}</th>`).join("") + "</tr></thead><tbody>";
+    dates.forEach((d, i) => {
+      const [, m, day] = d.split("-");
+      const rowVals = finalRanked.map(n => series[n][i].points);
+      const maxRow = Math.max(...rowVals);
+      html += `<tr><td>${day}-${m}</td>` + finalRanked.map(n => {
+        const v = series[n][i].points;
+        return `<td class="${v === maxRow ? 'rank1' : ''}">${v.toLocaleString("nl-NL")}</td>`;
+      }).join("") + "</tr>";
+    });
+    html += "</tbody></table>";
+    tableWrap.innerHTML = html;
+  }
+  buildTable();
+  toggleBtn.addEventListener("click", () => {
+    const vis = tableWrap.classList.toggle("visible");
+    toggleBtn.textContent = vis ? "Verberg tabel" : "Toon als tabel";
+  });
+})();
+</script>
