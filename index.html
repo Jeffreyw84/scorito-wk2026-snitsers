@@ -325,6 +325,43 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
 .standing-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .standing-name { flex: 1; color: var(--text-primary); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .standing-pts { color: var(--text-secondary); font-variant-numeric: tabular-nums; font-size: 0.76rem; }
+
+/* Bump chart */
+.bump-card { margin-top: 20px; }
+.bump-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: opacity 160ms ease, stroke-width 160ms ease;
+}
+.bump-dot {
+  stroke: var(--surface-1);
+  stroke-width: 2;
+  transition: opacity 160ms ease, r 160ms ease;
+  cursor: pointer;
+}
+.bump-name-label {
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: opacity 160ms ease, font-weight 160ms ease;
+}
+.bump-side-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: opacity 160ms ease;
+}
+.bump-rank-num {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--surface-1);
+  text-anchor: middle;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.bump-dimmed { opacity: 0.10; }
+.bump-hovered { stroke-width: 4; }
 </style>
 
 <div class="viz-root">
@@ -360,6 +397,17 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
       <button class="table-toggle" id="tableToggle">Toon als tabel</button>
       <div class="table-wrap" id="tableWrap"></div>
       <p class="footer-note">Bron: dagelijkse Scorito-klassementen uit de verslagen van 14 juni t/m 19 juli 2026. Eindstand inclusief kampioensbonus (250pt) voor wie de winnaar van het WK als kampioen had.</p>
+    </div>
+
+    <div class="card bump-card">
+      <div class="card-head">
+        <h2>Wie stond waar</h2>
+        <span class="hint">rangorde per dag, elke naam altijd zichtbaar</span>
+      </div>
+      <div class="chart-scroll">
+        <div class="chart-container" id="bumpContainer"></div>
+      </div>
+      <p class="footer-note">Elke lijn is één deelnemer. Een lijn die zakt betekent een slechtere rangorde die dag, ongeacht hoeveel punten erbij kwamen.</p>
     </div>
   </div>
 </div>
@@ -777,5 +825,211 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
 
   // initial render: full picture, matches the static chart on load
   renderAtIndex(dates.length - 1);
+
+  // ---- Bump chart: rank (1..12) over time, names always visible ----
+  (function buildBumpChart() {
+    // rank per player per date index: 1 = best (most points) that day
+    const ranks = {}; // ranks[name] = [rank at idx0, rank at idx1, ...]
+    order.forEach(name => { ranks[name] = new Array(dates.length); });
+    for (let i = 0; i < dates.length; i++) {
+      const rowRanked = order
+        .map(name => ({ name, pts: series[name][i].points }))
+        .sort((a, b) => b.pts - a.pts);
+      rowRanked.forEach((r, rankIdx) => { ranks[r.name][i] = rankIdx + 1; });
+    }
+
+    const n = order.length;
+    const bW = Math.max(dates.length * 46, 820);
+    const bH = n * 34 + 30;
+    const bMarginL = 108, bMarginR = 108, bMarginT = 16, bMarginB = 30;
+    const bPlotW = bW - bMarginL - bMarginR;
+    const bPlotH = bH - bMarginT - bMarginB;
+
+    const bx = i => bMarginL + (i / (dates.length - 1)) * bPlotW;
+    const by = rank => bMarginT + ((rank - 1) / (n - 1)) * bPlotH;
+
+    const svgNS = "http://www.w3.org/2000/svg";
+    const bsvg = document.createElementNS(svgNS, "svg");
+    bsvg.setAttribute("width", bW);
+    bsvg.setAttribute("height", bH);
+    bsvg.setAttribute("viewBox", `0 0 ${bW} ${bH}`);
+    bsvg.style.overflow = "visible";
+
+    // faint rank gridlines
+    for (let r = 1; r <= n; r++) {
+      const gy = by(r);
+      const line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", bMarginL);
+      line.setAttribute("x2", bW - bMarginR);
+      line.setAttribute("y1", gy);
+      line.setAttribute("y2", gy);
+      line.setAttribute("class", "gridline");
+      bsvg.appendChild(line);
+    }
+
+    // x labels: sparse, same cadence as main chart
+    dates.forEach((d, i) => {
+      if (i % 4 !== 0 && i !== dates.length - 1) return;
+      const [, m, day] = d.split("-");
+      const label = document.createElementNS(svgNS, "text");
+      label.setAttribute("x", bx(i));
+      label.setAttribute("y", bH - 6);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("class", "axis-text");
+      label.textContent = `${day}/${m}`;
+      bsvg.appendChild(label);
+    });
+
+    function bumpPath(name) {
+      return dates.map((d, i) => `${i === 0 ? 'M' : 'L'} ${bx(i).toFixed(1)} ${by(ranks[name][i]).toFixed(1)}`).join(' ');
+    }
+
+    const bLineEls = {}, bDotGroups = {}, bStartLabels = {}, bEndLabels = {};
+
+    order.forEach(name => {
+      const g = document.createElementNS(svgNS, "g");
+      g.setAttribute("data-player", name);
+
+      const path = document.createElementNS(svgNS, "path");
+      path.setAttribute("d", bumpPath(name));
+      path.setAttribute("class", "bump-line");
+      path.setAttribute("stroke", meta[name].color);
+      if (meta[name].dash !== "none") path.setAttribute("stroke-dasharray", meta[name].dash);
+      g.appendChild(path);
+      bLineEls[name] = path;
+
+      // a dot + rank number at every date so the reader can read exact rank anywhere
+      const dotsGroup = document.createElementNS(svgNS, "g");
+      dates.forEach((d, i) => {
+        const cx = bx(i), cy = by(ranks[name][i]);
+        const dot = document.createElementNS(svgNS, "circle");
+        dot.setAttribute("cx", cx);
+        dot.setAttribute("cy", cy);
+        dot.setAttribute("r", 8);
+        dot.setAttribute("fill", meta[name].color);
+        dot.setAttribute("class", "bump-dot");
+        dotsGroup.appendChild(dot);
+
+        const num = document.createElementNS(svgNS, "text");
+        num.setAttribute("x", cx);
+        num.setAttribute("y", cy + 3.2);
+        num.setAttribute("class", "bump-rank-num");
+        num.textContent = ranks[name][i];
+        dotsGroup.appendChild(num);
+      });
+      g.appendChild(dotsGroup);
+      bDotGroups[name] = dotsGroup;
+
+      // always-visible name label at the start (left) and end (right)
+      const startLabel = document.createElementNS(svgNS, "text");
+      startLabel.setAttribute("x", bMarginL - 14);
+      startLabel.setAttribute("y", by(ranks[name][0]) + 4);
+      startLabel.setAttribute("text-anchor", "end");
+      startLabel.setAttribute("class", "bump-side-label");
+      startLabel.setAttribute("fill", meta[name].color);
+      startLabel.textContent = name;
+      bsvg.appendChild(startLabel);
+      bStartLabels[name] = startLabel;
+
+      const endLabel = document.createElementNS(svgNS, "text");
+      endLabel.setAttribute("x", bW - bMarginR + 14);
+      endLabel.setAttribute("y", by(ranks[name][dates.length - 1]) + 4);
+      endLabel.setAttribute("text-anchor", "start");
+      endLabel.setAttribute("class", "bump-name-label");
+      endLabel.setAttribute("fill", meta[name].color);
+      endLabel.textContent = name;
+      bsvg.appendChild(endLabel);
+      bEndLabels[name] = endLabel;
+
+      bsvg.appendChild(g);
+    });
+
+    const bContainer = document.getElementById("bumpContainer");
+    bContainer.style.position = "relative";
+    bContainer.appendChild(bsvg);
+
+    const bTooltip = document.createElement("div");
+    bTooltip.className = "tooltip";
+    bContainer.appendChild(bTooltip);
+
+    function setBumpDim(activeName) {
+      order.forEach(name => {
+        const on = !activeName || name === activeName;
+        bLineEls[name].classList.toggle("bump-dimmed", !on);
+        bLineEls[name].classList.toggle("bump-hovered", on && !!activeName);
+        bDotGroups[name].classList.toggle("bump-dimmed", !on);
+        bStartLabels[name].classList.toggle("bump-dimmed", !on);
+        bEndLabels[name].classList.toggle("bump-dimmed", !on);
+        bEndLabels[name].style.fontWeight = (on && activeName) ? "800" : "650";
+      });
+    }
+
+    let bIsolated = null;
+    order.forEach(name => {
+      [bLineEls[name], bDotGroups[name], bStartLabels[name], bEndLabels[name]].forEach(el => {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", () => {
+          bIsolated = bIsolated === name ? null : name;
+          setBumpDim(bIsolated);
+        });
+        el.addEventListener("mouseenter", () => { if (!bIsolated) setBumpDim(name); });
+        el.addEventListener("mouseleave", () => { if (!bIsolated) setBumpDim(null); });
+      });
+    });
+
+    // hover hit area for a per-date tooltip (mirrors the main chart's crosshair tooltip)
+    const bCrosshair = document.createElementNS(svgNS, "line");
+    bCrosshair.setAttribute("y1", bMarginT);
+    bCrosshair.setAttribute("y2", bMarginT + bPlotH);
+    bCrosshair.setAttribute("class", "crosshair");
+    bsvg.appendChild(bCrosshair);
+
+    const bHitRect = document.createElementNS(svgNS, "rect");
+    bHitRect.setAttribute("x", bMarginL);
+    bHitRect.setAttribute("y", bMarginT);
+    bHitRect.setAttribute("width", bPlotW);
+    bHitRect.setAttribute("height", bPlotH);
+    bHitRect.setAttribute("fill", "transparent");
+    bsvg.appendChild(bHitRect);
+
+    bHitRect.addEventListener("mousemove", (e) => {
+      const rect = bsvg.getBoundingClientRect();
+      const scaleX = bW / rect.width;
+      const mx = (e.clientX - rect.left) * scaleX;
+      let idx = Math.round((mx - bMarginL) / bPlotW * (dates.length - 1));
+      idx = Math.max(0, Math.min(dates.length - 1, idx));
+
+      bCrosshair.setAttribute("x1", bx(idx));
+      bCrosshair.setAttribute("x2", bx(idx));
+      bCrosshair.classList.add("visible");
+
+      const rowsRanked = order
+        .map(name => ({ name, rank: ranks[name][idx], pts: series[name][idx].points, color: meta[name].color }))
+        .sort((a, b) => a.rank - b.rank);
+
+      const d = dates[idx];
+      const [, m, day] = d.split("-");
+      bTooltip.innerHTML = `<div class="tooltip-date">${day}-${m}-2026</div>` +
+        rowsRanked.map(r => `<div class="tooltip-row ${r.rank === 1 ? 'top' : ''}">
+          <span class="tooltip-dot" style="background:${r.color}"></span>
+          <span class="tooltip-name">${r.rank}. ${r.name}</span>
+          <span class="tooltip-val">${r.pts.toLocaleString("nl-NL")}</span>
+        </div>`).join("");
+
+      const containerRect = bContainer.getBoundingClientRect();
+      const relX = (e.clientX - containerRect.left);
+      const relY = (e.clientY - containerRect.top);
+      let tx = relX + 16;
+      if (tx + 170 > bContainer.scrollWidth) tx = relX - 170;
+      bTooltip.style.left = tx + "px";
+      bTooltip.style.top = Math.max(0, relY - 40) + "px";
+      bTooltip.classList.add("visible");
+    });
+
+    bHitRect.addEventListener("mouseleave", () => {
+      bCrosshair.classList.remove("visible");
+      bTooltip.classList.remove("visible");
+    });
+  })();
 })();
 </script>
