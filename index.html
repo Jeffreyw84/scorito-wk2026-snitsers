@@ -404,9 +404,19 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
         <h2>Wie stond waar</h2>
         <span class="hint">rangorde per dag, elke naam altijd zichtbaar</span>
       </div>
-      <div class="chart-scroll">
-        <div class="chart-container" id="bumpContainer"></div>
+      <div class="chart-container" id="bumpContainer"></div>
+
+      <div class="playback">
+        <button class="play-btn" id="bumpPlayBtn" aria-label="Afspelen">
+          <svg viewBox="0 0 16 16" fill="currentColor" id="bumpPlayIcon"><path d="M3 2l11 6-11 6V2z"/></svg>
+        </button>
+        <div class="scrub-wrap">
+          <input type="range" class="scrub" id="bumpScrub" min="0" max="31" step="1" value="31">
+          <span class="scrub-date" id="bumpScrubDate"></span>
+        </div>
+        <button class="replay-btn" id="bumpReplayBtn">Opnieuw</button>
       </div>
+
       <p class="footer-note">Elke lijn is één deelnemer. Een lijn die zakt betekent een slechtere rangorde die dag, ongeacht hoeveel punten erbij kwamen.</p>
     </div>
   </div>
@@ -839,9 +849,10 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
     }
 
     const n = order.length;
-    const bW = Math.max(dates.length * 46, 820);
-    const bH = n * 34 + 30;
-    const bMarginL = 108, bMarginR = 108, bMarginT = 16, bMarginB = 30;
+    const isNarrow = window.matchMedia('(max-width: 640px)').matches;
+    const bW = isNarrow ? 640 : 980;
+    const bH = n * (isNarrow ? 26 : 32) + 30;
+    const bMarginL = isNarrow ? 78 : 108, bMarginR = isNarrow ? 78 : 108, bMarginT = 16, bMarginB = 30;
     const bPlotW = bW - bMarginL - bMarginR;
     const bPlotH = bH - bMarginT - bMarginB;
 
@@ -850,10 +861,13 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
 
     const svgNS = "http://www.w3.org/2000/svg";
     const bsvg = document.createElementNS(svgNS, "svg");
-    bsvg.setAttribute("width", bW);
-    bsvg.setAttribute("height", bH);
+    bsvg.setAttribute("width", "100%");
+    bsvg.setAttribute("height", "auto");
     bsvg.setAttribute("viewBox", `0 0 ${bW} ${bH}`);
+    bsvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     bsvg.style.overflow = "visible";
+    bsvg.style.display = "block";
+    bsvg.style.maxWidth = "100%";
 
     // faint rank gridlines
     for (let r = 1; r <= n; r++) {
@@ -900,6 +914,7 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
 
       // a dot + rank number at every date so the reader can read exact rank anywhere
       const dotsGroup = document.createElementNS(svgNS, "g");
+      const dotEls = [], numEls = [];
       dates.forEach((d, i) => {
         const cx = bx(i), cy = by(ranks[name][i]);
         const dot = document.createElementNS(svgNS, "circle");
@@ -909,6 +924,7 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
         dot.setAttribute("fill", meta[name].color);
         dot.setAttribute("class", "bump-dot");
         dotsGroup.appendChild(dot);
+        dotEls.push(dot);
 
         const num = document.createElementNS(svgNS, "text");
         num.setAttribute("x", cx);
@@ -916,9 +932,10 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
         num.setAttribute("class", "bump-rank-num");
         num.textContent = ranks[name][i];
         dotsGroup.appendChild(num);
+        numEls.push(num);
       });
       g.appendChild(dotsGroup);
-      bDotGroups[name] = dotsGroup;
+      bDotGroups[name] = { group: dotsGroup, dots: dotEls, nums: numEls };
 
       // always-visible name label at the start (left) and end (right)
       const startLabel = document.createElementNS(svgNS, "text");
@@ -957,7 +974,7 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
         const on = !activeName || name === activeName;
         bLineEls[name].classList.toggle("bump-dimmed", !on);
         bLineEls[name].classList.toggle("bump-hovered", on && !!activeName);
-        bDotGroups[name].classList.toggle("bump-dimmed", !on);
+        bDotGroups[name].group.classList.toggle("bump-dimmed", !on);
         bStartLabels[name].classList.toggle("bump-dimmed", !on);
         bEndLabels[name].classList.toggle("bump-dimmed", !on);
         bEndLabels[name].style.fontWeight = (on && activeName) ? "800" : "650";
@@ -966,7 +983,7 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
 
     let bIsolated = null;
     order.forEach(name => {
-      [bLineEls[name], bDotGroups[name], bStartLabels[name], bEndLabels[name]].forEach(el => {
+      [bLineEls[name], bDotGroups[name].group, bStartLabels[name], bEndLabels[name]].forEach(el => {
         el.style.cursor = "pointer";
         el.addEventListener("click", () => {
           bIsolated = bIsolated === name ? null : name;
@@ -1030,6 +1047,121 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
       bCrosshair.classList.remove("visible");
       bTooltip.classList.remove("visible");
     });
+
+    // ---- Bump chart playback: reveal dots/line up to the scrub index ----
+    order.forEach(name => { bLineEls[name].style.strokeDasharray = bLineEls[name].getTotalLength(); });
+
+    const bumpLengthAtIndex = {};
+    order.forEach(name => {
+      const path = bLineEls[name];
+      const total = path.getTotalLength();
+      const arr = [0];
+      for (let i = 1; i < dates.length; i++) {
+        const targetX = bx(i);
+        let lo = 0, hi = total;
+        for (let iter = 0; iter < 24; iter++) {
+          const mid = (lo + hi) / 2;
+          const pt = path.getPointAtLength(mid);
+          if (pt.x < targetX) lo = mid; else hi = mid;
+        }
+        arr.push((lo + hi) / 2);
+      }
+      bumpLengthAtIndex[name] = arr;
+    });
+
+    const bScrub = document.getElementById("bumpScrub");
+    const bScrubDate = document.getElementById("bumpScrubDate");
+    const bPlayBtn = document.getElementById("bumpPlayBtn");
+    const bPlayIcon = document.getElementById("bumpPlayIcon");
+    const bReplayBtn = document.getElementById("bumpReplayBtn");
+
+    bScrub.max = String(dates.length - 1);
+    bScrub.value = String(dates.length - 1);
+
+    const B_ICON_PLAY = '<path d="M3 2l11 6-11 6V2z"/>';
+    const B_ICON_PAUSE = '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';
+
+    let bPlaying = false, bRafId = null, bLastTick = 0, bProgress = dates.length - 1;
+    const B_MS_PER_STEP = 420;
+
+    function bFormatDate(d) {
+      const [, m, day] = d.split("-");
+      return `${day}-${m}-2026`;
+    }
+
+    function renderBumpAtIndex(idx) {
+      idx = Math.max(0, Math.min(dates.length - 1, idx));
+      order.forEach(name => {
+        const total = bLineEls[name].getTotalLength();
+        const lenAtIdx = bumpLengthAtIndex[name][idx];
+        bLineEls[name].style.strokeDashoffset = total - lenAtIdx;
+
+        const { dots, nums } = bDotGroups[name];
+        dots.forEach((dot, i) => { dot.style.opacity = i <= idx ? 1 : 0; });
+        nums.forEach((num, i) => { num.style.opacity = i <= idx ? 1 : 0; });
+
+        // end label rides the current rank while scrubbing, snaps back once at the end
+        endLabelFollow(name, idx);
+      });
+      bScrubDate.textContent = bFormatDate(dates[idx]);
+      bScrub.value = String(idx);
+    }
+
+    function endLabelFollow(name, idx) {
+      const label = bEndLabels[name];
+      const targetY = by(ranks[name][idx]) + 4;
+      label.setAttribute("y", targetY);
+    }
+
+    function stopBumpPlaying() {
+      bPlaying = false;
+      if (bRafId) cancelAnimationFrame(bRafId);
+      bRafId = null;
+      bPlayIcon.innerHTML = B_ICON_PLAY;
+      bPlayBtn.setAttribute("aria-label", "Afspelen");
+    }
+
+    function bumpTick(ts) {
+      if (!bPlaying) return;
+      if (!bLastTick) bLastTick = ts;
+      const elapsed = ts - bLastTick;
+      if (elapsed >= B_MS_PER_STEP) {
+        bLastTick = ts;
+        bProgress += 1;
+        if (bProgress >= dates.length - 1) {
+          bProgress = dates.length - 1;
+          renderBumpAtIndex(Math.round(bProgress));
+          stopBumpPlaying();
+          return;
+        }
+        renderBumpAtIndex(Math.round(bProgress));
+      }
+      bRafId = requestAnimationFrame(bumpTick);
+    }
+
+    function startBumpPlaying() {
+      bProgress = parseInt(bScrub.value, 10) >= dates.length - 1 ? 0 : parseInt(bScrub.value, 10);
+      bPlaying = true;
+      bLastTick = 0;
+      bPlayIcon.innerHTML = B_ICON_PAUSE;
+      bPlayBtn.setAttribute("aria-label", "Pauzeren");
+      bRafId = requestAnimationFrame(bumpTick);
+    }
+
+    bPlayBtn.addEventListener("click", () => { bPlaying ? stopBumpPlaying() : startBumpPlaying(); });
+    bReplayBtn.addEventListener("click", () => {
+      stopBumpPlaying();
+      bProgress = 0;
+      renderBumpAtIndex(0);
+      setTimeout(startBumpPlaying, 150);
+    });
+    bScrub.addEventListener("input", () => {
+      stopBumpPlaying();
+      bProgress = parseInt(bScrub.value, 10);
+      renderBumpAtIndex(bProgress);
+    });
+
+    renderBumpAtIndex(dates.length - 1);
   })();
 })();
 </script>
