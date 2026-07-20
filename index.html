@@ -215,6 +215,116 @@ th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-botto
 th:first-child, td:first-child { text-align: left; font-variant-numeric: initial; }
 th { color: var(--text-muted); font-weight: 600; position: sticky; top: 0; background: var(--surface-1); }
 td.rank1 { font-weight: 700; color: var(--text-primary); }
+
+/* Playback controls */
+.playback {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.play-btn {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease;
+}
+.play-btn:hover { background: var(--grid); }
+.play-btn svg { width: 14px; height: 14px; }
+.scrub-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.scrub {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--grid);
+  outline: none;
+  cursor: pointer;
+}
+.scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--s1);
+  border: 2px solid var(--surface-1);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.scrub::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--s1);
+  border: 2px solid var(--surface-1);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.scrub-date {
+  flex: none;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 76px;
+  text-align: right;
+}
+.replay-btn {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.replay-btn:hover { background: var(--grid); }
+
+/* Live standings during playback */
+.standings {
+  margin: 16px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.standing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--page);
+  font-size: 0.8rem;
+  transition: transform 200ms ease;
+}
+.standing-rank {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  width: 16px;
+  flex: none;
+}
+.standing-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.standing-name { flex: 1; color: var(--text-primary); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.standing-pts { color: var(--text-secondary); font-variant-numeric: tabular-nums; font-size: 0.76rem; }
 </style>
 
 <div class="viz-root">
@@ -232,6 +342,20 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
       <div class="chart-scroll">
         <div class="chart-container" id="chartContainer"></div>
       </div>
+
+      <div class="playback">
+        <button class="play-btn" id="playBtn" aria-label="Afspelen">
+          <svg viewBox="0 0 16 16" fill="currentColor" id="playIcon"><path d="M3 2l11 6-11 6V2z"/></svg>
+        </button>
+        <div class="scrub-wrap">
+          <input type="range" class="scrub" id="scrub" min="0" max="31" step="1" value="31">
+          <span class="scrub-date" id="scrubDate"></span>
+        </div>
+        <button class="replay-btn" id="replayBtn">Opnieuw</button>
+      </div>
+
+      <div class="standings" id="standings"></div>
+
       <div class="legend" id="legend"></div>
       <button class="table-toggle" id="tableToggle">Toon als tabel</button>
       <div class="table-wrap" id="tableWrap"></div>
@@ -247,7 +371,7 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
   const series = DATA.series;
   const players = Object.keys(series);
 
-  // Fixed hue order per palette.md — 8 solid + 4 repeats with dash pattern
+  // Fixed hue order per palette.md: 8 solid + 4 repeats with dash pattern
   const hueSlots = ['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)','var(--s6)','var(--s7)','var(--s8)'];
   const order = ["Fabian","Jetze","Jeff","Sander","Tinus","Geert","Taeke","Arjen","Marcel","Jan","Michiel","Thea"];
   const dashPatterns = ["none","none","none","none","none","none","none","none","6 4","6 4","6 4","6 4"];
@@ -333,7 +457,7 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
   });
 
   // lines + end dots + end labels, in a fixed group per player for dim/highlight
-  const lineEls = {}, dotEls = {}, labelEls = {};
+  const lineEls = {}, dotEls = {}, labelEls = {}, pathLengths = {};
   order.forEach(name => {
     const g = document.createElementNS(svgNS, "g");
     g.setAttribute("data-player", name);
@@ -342,7 +466,6 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
     path.setAttribute("d", pathFor(name));
     path.setAttribute("class", "series-line");
     path.setAttribute("stroke", meta[name].color);
-    if (meta[name].dash !== "none") path.setAttribute("stroke-dasharray", meta[name].dash);
     g.appendChild(path);
     lineEls[name] = path;
 
@@ -358,6 +481,9 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
 
     svg.appendChild(g);
   });
+
+  // measure each path's total length once mounted (needed for stroke-dashoffset scrubbing)
+  order.forEach(name => { pathLengths[name] = lineEls[name].getTotalLength(); });
 
   // end labels drawn after all lines/dots so text sits on top; skip pure overlap collisions minimally
   const labelPositions = order
@@ -503,5 +629,153 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
     const vis = tableWrap.classList.toggle("visible");
     toggleBtn.textContent = vis ? "Verberg tabel" : "Toon als tabel";
   });
+
+  // ---- Playback / scrub animation ----
+  // For each series, precompute the path length up to each date index (by sampling
+  // getPointAtLength against the x-position), so dash-offset scrubbing tracks the
+  // real date axis rather than a naive linear fraction.
+  const lengthAtIndex = {};
+  order.forEach(name => {
+    const path = lineEls[name];
+    const total = pathLengths[name];
+    const arr = [0];
+    // binary-search each date's x position along the path length
+    for (let i = 1; i < dates.length; i++) {
+      const targetX = x(i);
+      let lo = 0, hi = total;
+      for (let iter = 0; iter < 24; iter++) {
+        const mid = (lo + hi) / 2;
+        const pt = path.getPointAtLength(mid);
+        if (pt.x < targetX) lo = mid; else hi = mid;
+      }
+      arr.push((lo + hi) / 2);
+    }
+    lengthAtIndex[name] = arr;
+  });
+
+  order.forEach(name => {
+    const path = lineEls[name];
+    const total = pathLengths[name];
+    path.style.strokeDasharray = total;
+    if (meta[name].dash !== "none") {
+      // keep the dashed identity for the 4 repeat-hue series, layered via a second path is overkill here;
+      // dashed series simply reveal progressively too, using the same offset mechanic.
+    }
+  });
+
+  const scrub = document.getElementById("scrub");
+  const scrubDate = document.getElementById("scrubDate");
+  const playBtn = document.getElementById("playBtn");
+  const playIcon = document.getElementById("playIcon");
+  const replayBtn = document.getElementById("replayBtn");
+  const standingsEl = document.getElementById("standings");
+
+  scrub.max = String(dates.length - 1);
+  scrub.value = String(dates.length - 1);
+
+  const ICON_PLAY = '<path d="M3 2l11 6-11 6V2z"/>';
+  const ICON_PAUSE = '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';
+
+  let playing = false;
+  let rafId = null;
+  let lastTick = 0;
+  const MS_PER_STEP = 420;
+  let progress = dates.length - 1; // fractional index while playing
+
+  function formatDate(d) {
+    const [, m, day] = d.split("-");
+    return `${day}-${m}-2026`;
+  }
+
+  function renderAtIndex(idx) {
+    idx = Math.max(0, Math.min(dates.length - 1, idx));
+    const atEnd = idx === dates.length - 1;
+    order.forEach(name => {
+      const total = pathLengths[name];
+      const lenAtIdx = lengthAtIndex[name][idx];
+      lineEls[name].style.strokeDashoffset = total - lenAtIdx;
+
+      const pt = lineEls[name].getPointAtLength(lenAtIdx);
+      dotEls[name].setAttribute("cx", pt.x);
+      dotEls[name].setAttribute("cy", pt.y);
+
+      labelEls[name].style.opacity = atEnd ? 1 : 0.25;
+    });
+
+    scrubDate.textContent = formatDate(dates[idx]);
+    scrub.value = String(idx);
+
+    const ranked = order
+      .map(name => ({ name, pts: series[name][idx].points }))
+      .sort((a, b) => b.pts - a.pts);
+
+    standingsEl.innerHTML = ranked.map((r, i) => `
+      <div class="standing-row">
+        <span class="standing-rank">${i + 1}.</span>
+        <span class="standing-dot" style="background:${meta[r.name].color}"></span>
+        <span class="standing-name">${r.name}</span>
+        <span class="standing-pts">${r.pts.toLocaleString("nl-NL")}pt</span>
+      </div>`).join("");
+  }
+
+  function stopPlaying() {
+    playing = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    playIcon.innerHTML = ICON_PLAY;
+    playBtn.setAttribute("aria-label", "Afspelen");
+  }
+
+  function tick(ts) {
+    if (!playing) return;
+    if (!lastTick) lastTick = ts;
+    const elapsed = ts - lastTick;
+    if (elapsed >= MS_PER_STEP) {
+      lastTick = ts;
+      progress += 1;
+      if (progress >= dates.length - 1) {
+        progress = dates.length - 1;
+        renderAtIndex(Math.round(progress));
+        stopPlaying();
+        return;
+      }
+      renderAtIndex(Math.round(progress));
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function startPlaying() {
+    if (parseInt(scrub.value, 10) >= dates.length - 1) {
+      progress = 0;
+    } else {
+      progress = parseInt(scrub.value, 10);
+    }
+    playing = true;
+    lastTick = 0;
+    playIcon.innerHTML = ICON_PAUSE;
+    playBtn.setAttribute("aria-label", "Pauzeren");
+    rafId = requestAnimationFrame(tick);
+  }
+
+  playBtn.addEventListener("click", () => {
+    if (playing) stopPlaying();
+    else startPlaying();
+  });
+
+  replayBtn.addEventListener("click", () => {
+    stopPlaying();
+    progress = 0;
+    renderAtIndex(0);
+    setTimeout(startPlaying, 150);
+  });
+
+  scrub.addEventListener("input", () => {
+    stopPlaying();
+    progress = parseInt(scrub.value, 10);
+    renderAtIndex(progress);
+  });
+
+  // initial render: full picture, matches the static chart on load
+  renderAtIndex(dates.length - 1);
 })();
 </script>
