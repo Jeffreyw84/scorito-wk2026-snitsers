@@ -861,12 +861,13 @@ td.rank1 { font-weight: 700; color: var(--text-primary); }
 
     const svgNS = "http://www.w3.org/2000/svg";
     const bsvg = document.createElementNS(svgNS, "svg");
-    bsvg.setAttribute("width", "100%");
-    bsvg.setAttribute("height", "auto");
     bsvg.setAttribute("viewBox", `0 0 ${bW} ${bH}`);
     bsvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     bsvg.style.overflow = "visible";
     bsvg.style.display = "block";
+    bsvg.style.width = "100%";
+    bsvg.style.height = "auto";
+    bsvg.style.aspectRatio = `${bW} / ${bH}`;
     bsvg.style.maxWidth = "100%";
 
     // faint rank gridlines
